@@ -80,7 +80,7 @@ class DumbGitProxy
     }
   end
 
-  private
+  protected
   def write_pair_for(socket)
     if socket == @client
       @server
@@ -98,7 +98,12 @@ class DumbGitProxy
   def process_packet(stream)
     data = stream.read
     check_for_eof(data)
+    filter_packet(data, stream)
     write_pair_for(stream).write(data)
+  end
+
+  def filter_packet(data, stream)
+    # noop
   end
 
   def check_for_eof(data)
@@ -110,5 +115,20 @@ class DumbGitProxy
   end
 end
 
+# Log the conversation between the client and the server to stderr
+class LoggingGitProxy < DumbGitProxy
+  def packet_dump(data, stream)
+    log data.inspect, stream == @client ? ">" : "<"
+  end
+
+  def log(msg, source = nil)
+    $stderr.puts((source.nil? ? "" : "#{source} ") + msg)
+  end
+
+  def filter_packet(data, stream)
+    packet_dump data, stream
+  end
+end
+
 host, port = ARGV
-DumbGitProxy.new(host, port).run
+LoggingGitProxy.new(host, port).run
