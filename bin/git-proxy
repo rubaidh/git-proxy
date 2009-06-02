@@ -42,10 +42,6 @@ class PacketizedStream
     select(all_packetized_streams).first
   end
 
-  def method_missing(name, *args, &block)
-    @real_stream.send(name, *args, &block)
-  end
-
   private
   def all_packetized_streams
     self.class.all_packetized_streams
