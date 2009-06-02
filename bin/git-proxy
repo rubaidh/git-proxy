@@ -2,14 +2,6 @@
 
 require 'socket'
 
-def packet_dump(data, source)
-  log data.inspect, source
-end
-
-def log(msg, source = nil)
-  $stderr.puts((source.nil? ? "" : "#{source} ") + msg)
-end
-
 class PacketizedStream
   attr_accessor :istream, :ostream
 
@@ -45,6 +37,11 @@ class PacketizedStream
     end
   end
 
+  def close
+    @istream.close
+    @ostream.close unless @ostream.closed?
+  end
+
   def self.select_reads_on_all_packetized_streams
     packetized_versions_of(select(all_packetized_streams.map { |s| s.istream }).first)
   end
@@ -65,28 +62,37 @@ class PacketizedStream
   end
 end
 
-host, port = ARGV
+# This is the dumbest git proxy ever.  It just takes the messages from the
+# client and passes them on to the server.
+class DumbGitProxy
+  def initialize(host, port)
+    @client = PacketizedStream.new($stdin, $stdout)
+    @server = PacketizedStream.new(TCPSocket.new(host, port))
+  end
 
-$stderr.puts "Connecting to #{host}:#{port}"
-socket = TCPSocket.new(host, port)
-
-packetized_client  = PacketizedStream.new($stdin, $stdout)
-packetized_socket = PacketizedStream.new(socket)
-
-loop do
-  readable = PacketizedStream.select_reads_on_all_packetized_streams
-  if readable.include?(packetized_client)
-    data = packetized_client.read
-    packet_dump data, ">"
-    packetized_socket.write(data)
-    if data.nil?
-      $stdin.close
-      socket.close
-      break
+  def start
+    loop do
+      PacketizedStream.select_reads_on_all_packetized_streams.each do |stream|
+        data = stream.read
+        if data.nil?
+          @client.close
+          @server.close
+          return
+        end
+        write_pair_for(stream).write(data)
+      end
     end
-  elsif readable.include?(packetized_socket)
-    data = packetized_socket.read
-    packet_dump data, "<"
-    packetized_client.write(data)
+  end
+
+  private
+  def write_pair_for(socket)
+    if socket == @client
+      @server
+    elsif socket == @server
+      @client
+    end
   end
 end
+
+host, port = ARGV
+DumbGitProxy.new(host, port).start
