@@ -70,18 +70,14 @@ class DumbGitProxy
     @server = PacketizedStream.new(TCPSocket.new(host, port))
   end
 
-  def start
-    loop do
-      PacketizedStream.select_reads_on_all_packetized_streams.each do |stream|
-        data = stream.read
-        if data.nil?
-          @client.close
-          @server.close
-          return
+  def run
+    catch(:eof) {
+      loop do
+        each_readable_stream do |stream|
+          process_packet(stream)
         end
-        write_pair_for(stream).write(data)
       end
-    end
+    }
   end
 
   private
@@ -92,7 +88,27 @@ class DumbGitProxy
       @client
     end
   end
+
+  def each_readable_stream
+    PacketizedStream.select_reads_on_all_packetized_streams.each do |stream|
+      yield stream
+    end
+  end
+
+  def process_packet(stream)
+    data = stream.read
+    check_for_eof(data)
+    write_pair_for(stream).write(data)
+  end
+
+  def check_for_eof(data)
+    if data.nil?
+      @client.close
+      @server.close
+      throw :eof
+    end
+  end
 end
 
 host, port = ARGV
-DumbGitProxy.new(host, port).start
+DumbGitProxy.new(host, port).run
