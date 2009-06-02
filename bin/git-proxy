@@ -11,19 +11,26 @@ def log(msg, source = nil)
 end
 
 class PacketizedStream
-  def initialize(real_stream)
-    @real_stream = real_stream
-    @real_stream.sync = true
+  attr_accessor :istream, :ostream
 
-    all_packetized_streams << real_stream
+  def initialize(istream, ostream = nil)
+    @istream = istream
+    if ostream.nil?
+      @ostream = istream
+    else
+      @ostream = ostream
+    end
+    @istream.sync = @ostream.sync = true
+
+    all_packetized_streams << self
   end
 
   def read
-    header = @real_stream.read(4)
+    header = @istream.read(4)
     if !header.nil?
       bytes_to_read = header.hex - 4
       if bytes_to_read > 0
-        @real_stream.read(bytes_to_read)
+        @istream.read(bytes_to_read)
       else
         ""
       end
@@ -32,14 +39,14 @@ class PacketizedStream
 
   def write(str)
     if !str.nil? && str.length > 0
-      @real_stream.write(("%04x" % (str.length + 4)) + str)
+      @ostream.write(("%04x" % (str.length + 4)) + str)
     else
-      @real_stream.write("0000")
+      @ostream.write("0000")
     end
   end
 
   def self.select_reads_on_all_packetized_streams
-    select(all_packetized_streams).first
+    packetized_versions_of(select(all_packetized_streams.map { |s| s.istream }).first)
   end
 
   private
@@ -50,6 +57,12 @@ class PacketizedStream
   def self.all_packetized_streams
     @all_packetized_streams ||= []
   end
+
+  def self.packetized_versions_of(streams)
+    streams.map do |stream|
+      all_packetized_streams.select { |s| s.istream == stream }
+    end.flatten
+  end
 end
 
 host, port = ARGV
@@ -57,14 +70,13 @@ host, port = ARGV
 $stderr.puts "Connecting to #{host}:#{port}"
 socket = TCPSocket.new(host, port)
 
-packetized_stdin  = PacketizedStream.new($stdin)
-packetized_stdout = PacketizedStream.new($stdout)
+packetized_client  = PacketizedStream.new($stdin, $stdout)
 packetized_socket = PacketizedStream.new(socket)
 
 loop do
   readable = PacketizedStream.select_reads_on_all_packetized_streams
-  if readable.include?($stdin)
-    data = packetized_stdin.read
+  if readable.include?(packetized_client)
+    data = packetized_client.read
     packet_dump data, ">"
     packetized_socket.write(data)
     if data.nil?
@@ -72,9 +84,9 @@ loop do
       socket.close
       break
     end
-  elsif readable.include?(socket)
+  elsif readable.include?(packetized_socket)
     data = packetized_socket.read
     packet_dump data, "<"
-    packetized_stdout.write(data)
+    packetized_client.write(data)
   end
 end
