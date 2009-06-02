@@ -1,0 +1,7 @@
+= Git Proxy
+
+We use git submodules a lot. This means that, when we clone a shiny new Ruby
+on Rails application, typically we have a submodule for Rails itself. And that
+means cloning a 10MB repository. It's not the end of the world, but it's a
+little bit slow and frustrating. The purpose of this ruby gem is to make it
+just that little bit faster.
