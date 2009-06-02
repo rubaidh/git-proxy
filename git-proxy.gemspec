@@ -17,7 +17,10 @@ spec = Gem::Specification.new do |s|
 
   s.files = %w(
     git-proxy.gemspec CHANGELOG MIT-LICENSE README.rdoc
+    bin/git-proxy
   )
+
+  s.executables = %w( git-proxy )
 
   s.has_rdoc          = true
   s.extra_rdoc_files += ['README.rdoc', 'CHANGELOG', 'MIT-LICENSE']
