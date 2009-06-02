@@ -1,0 +1,31 @@
+= Development notes
+
+== Git Daemon protocol
+
+Since the git daemon protocol seems to be somewhat undocumented, here's my
+stab at it, from discovery, reading the source code and pure guesswork.
+
+=== Packetized Steam
+
+... at least that's what the git source code calls it. The basic format is
+that each line is preceded by it's line length, kinda like Pascal strings,
+IIRC. The first four bytes of every line are a hex representation of the line
+length, *including the header 4 bytes*.
+
+Let's take an example. The string "Hello World" is 11 bytes long. We'll add
+another 4 bytes to account for the header, totalling 15 bytes. 15 is 'F' in
+hex, so the resulting packetized stream would be:
+
+    000fHello World
+
+There is a special case. A length of 0 means end of stream. So, to indicate
+end of stream, you'll send:
+
+    0000
+
+Obviously, since we're counting the header itself in the length, a length of
+1-3 should be considered invalid.
+
+The current version of Git that I'm examining the source for (1.6.3.2, I
+think) will accept both uppercase and lowercase hex digits. (FIXME: I should
+check to see that this was always the case!)
