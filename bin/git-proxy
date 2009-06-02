@@ -9,19 +9,48 @@ socket = TCPSocket.new(host, port)
 
 $stdin.sync = $stdout.sync = socket.sync = true
 
-loop do
-  begin
-    readable, writable, errorable = select([$stdin, socket])
-    if readable.include?($stdin)
-      data = $stdin.readpartial(1024)
-      $stderr.puts "> " + data.inspect
-      socket.write(data)
-    elsif readable.include?(socket)
-      data = socket.readpartial(1024)
-      $stderr.puts "< " + data.inspect
-      $stdout.write(data)
+def packetized_read(stream)
+  header = stream.read(4)
+  if !header.nil?
+    bytes_to_read = header.hex - 4
+    if bytes_to_read > 0
+      stream.read(bytes_to_read)
+    else
+      ""
     end
-  rescue EOFError
-    break if $stdin.closed? && socket.closed?
+  end
+end
+
+def packetized_write(stream, str)
+  if !str.nil? && str.length > 0
+    stream.write(("%04x" % (str.length + 4)) + str)
+  else
+    stream.write("0000")
+  end
+end
+
+def packet_dump(data, source)
+  log data.inspect, source
+end
+
+def log(msg, source = nil)
+  $stderr.puts((source.nil? ? "" : "#{source} ") + msg)
+end
+
+loop do
+  readable, _, _ = select([$stdin, socket])
+  if readable.include?($stdin)
+    data = packetized_read($stdin)
+    packet_dump data, ">"
+    packetized_write(socket, data)
+    if data.nil?
+      $stdin.close
+      socket.close
+      break
+    end
+  elsif readable.include?(socket)
+    data = packetized_read(socket)
+    packet_dump data, "<"
+    packetized_write($stdout, data)
   end
 end
