@@ -2,33 +2,6 @@
 
 require 'socket'
 
-host, port = ARGV
-
-$stderr.puts "Connecting to #{host}:#{port}"
-socket = TCPSocket.new(host, port)
-
-$stdin.sync = $stdout.sync = socket.sync = true
-
-def packetized_read(stream)
-  header = stream.read(4)
-  if !header.nil?
-    bytes_to_read = header.hex - 4
-    if bytes_to_read > 0
-      stream.read(bytes_to_read)
-    else
-      ""
-    end
-  end
-end
-
-def packetized_write(stream, str)
-  if !str.nil? && str.length > 0
-    stream.write(("%04x" % (str.length + 4)) + str)
-  else
-    stream.write("0000")
-  end
-end
-
 def packet_dump(data, source)
   log data.inspect, source
 end
@@ -37,20 +10,75 @@ def log(msg, source = nil)
   $stderr.puts((source.nil? ? "" : "#{source} ") + msg)
 end
 
+class PacketizedStream
+  def initialize(real_stream)
+    @real_stream = real_stream
+    @real_stream.sync = true
+
+    all_packetized_streams << real_stream
+  end
+
+  def read
+    header = @real_stream.read(4)
+    if !header.nil?
+      bytes_to_read = header.hex - 4
+      if bytes_to_read > 0
+        @real_stream.read(bytes_to_read)
+      else
+        ""
+      end
+    end
+  end
+
+  def write(str)
+    if !str.nil? && str.length > 0
+      @real_stream.write(("%04x" % (str.length + 4)) + str)
+    else
+      @real_stream.write("0000")
+    end
+  end
+
+  def self.select_reads_on_all_packetized_streams
+    select(all_packetized_streams).first
+  end
+
+  def method_missing(name, *args, &block)
+    @real_stream.send(name, *args, &block)
+  end
+
+  private
+  def all_packetized_streams
+    self.class.all_packetized_streams
+  end
+
+  def self.all_packetized_streams
+    @all_packetized_streams ||= []
+  end
+end
+
+host, port = ARGV
+
+$stderr.puts "Connecting to #{host}:#{port}"
+socket = TCPSocket.new(host, port)
+
+packetized_stdin  = PacketizedStream.new($stdin)
+packetized_stdout = PacketizedStream.new($stdout)
+packetized_socket = PacketizedStream.new(socket)
+
 loop do
-  readable, _, _ = select([$stdin, socket])
+  readable = PacketizedStream.select_reads_on_all_packetized_streams
   if readable.include?($stdin)
-    data = packetized_read($stdin)
+    data = packetized_stdin.read
     packet_dump data, ">"
-    packetized_write(socket, data)
+    packetized_socket.write(data)
     if data.nil?
       $stdin.close
       socket.close
       break
     end
   elsif readable.include?(socket)
-    data = packetized_read(socket)
+    data = packetized_socket.read
     packet_dump data, "<"
-    packetized_write($stdout, data)
+    packetized_stdout.write(data)
   end
 end
