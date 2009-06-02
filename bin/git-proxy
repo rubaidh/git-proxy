@@ -1,3 +1,28 @@
 #!/usr/bin/env ruby
 
-$stderr.puts ARGV.inspect
+require 'socket'
+
+host, port = ARGV
+
+socket = TCPSocket.new(host, port)
+
+# Writer
+writer = Thread.new do
+  while data = $stdin.gets do
+    $stderr.puts("> #{data}")
+    socket.puts(data)
+  end
+  $stderr.puts "Writer ended"
+end
+
+# Reader
+reader = Thread.new do
+  while data = socket.gets do
+    $stderr.puts "< #{data}"
+    $stdout.puts data
+  end
+  $stderr.puts "Reader ended"
+end
+
+writer.join
+reader.join
