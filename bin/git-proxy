@@ -7,25 +7,21 @@ host, port = ARGV
 $stderr.puts "Connecting to #{host}:#{port}"
 socket = TCPSocket.new(host, port)
 
-# Writer
-writer = Thread.new do
-  $stderr.puts "Starting writer"
-  while data = $stdin.read(1) do
-    $stderr.write("#{data}")
-    socket.write(data)
-  end
-  $stderr.puts "\nWriter ended"
-end
+$stdin.sync = $stdout.sync = socket.sync = true
 
-# Reader
-reader = Thread.new do
-  $stderr.puts "Starting reader"
-  while data = socket.read(1) do
-    $stderr.write "#{data}"
-    $stdout.write data
+loop do
+  begin
+    readable, writable, errorable = select([$stdin, socket])
+    if readable.include?($stdin)
+      data = $stdin.readpartial(1024)
+      $stderr.puts "> " + data.inspect
+      socket.write(data)
+    elsif readable.include?(socket)
+      data = socket.readpartial(1024)
+      $stderr.puts "< " + data.inspect
+      $stdout.write(data)
+    end
+  rescue EOFError
+    break if $stdin.closed? && socket.closed?
   end
-  $stderr.puts "\nReader ended"
 end
-
-writer.join
-reader.join
