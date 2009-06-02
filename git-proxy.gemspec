@@ -16,7 +16,7 @@ spec = Gem::Specification.new do |s|
     "little bit faster."
 
   s.files = %w(
-    git-proxy.gemspec CHANGELOG MIT-LICENSE README.rdoc
+    git-proxy.gemspec CHANGELOG MIT-LICENSE README.rdoc NOTES.rdoc
     bin/git-proxy
   )
 
