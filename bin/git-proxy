@@ -4,24 +4,27 @@ require 'socket'
 
 host, port = ARGV
 
+$stderr.puts "Connecting to #{host}:#{port}"
 socket = TCPSocket.new(host, port)
 
 # Writer
 writer = Thread.new do
-  while data = $stdin.gets do
-    $stderr.puts("> #{data}")
-    socket.puts(data)
+  $stderr.puts "Starting writer"
+  while data = $stdin.read(1) do
+    $stderr.write("#{data}")
+    socket.write(data)
   end
-  $stderr.puts "Writer ended"
+  $stderr.puts "\nWriter ended"
 end
 
 # Reader
 reader = Thread.new do
-  while data = socket.gets do
-    $stderr.puts "< #{data}"
-    $stdout.puts data
+  $stderr.puts "Starting reader"
+  while data = socket.read(1) do
+    $stderr.write "#{data}"
+    $stdout.write data
   end
-  $stderr.puts "Reader ended"
+  $stderr.puts "\nReader ended"
 end
 
 writer.join
